@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('address')->nullable();
             $table->float('roi')->nullable();
-            $table->float('win_rate')->nullable();
+            $table->float('winrate')->nullable();
             $table->enum('status', ['normal','approved','in_review','disqualified'])->default('normal');
             $table->timestamp('created_at')->useCurrent(); 
             $table->timestamp('updated_at')->nullable();   

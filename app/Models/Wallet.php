@@ -14,9 +14,10 @@ class Wallet extends Model
     protected $table = 'wallets';
 
     protected $fillable = [
+        'label',
         'address',
         'roi',
-        'win_rate',
+        'winrate',
         'status',
         'created_at',
         'updated_at',

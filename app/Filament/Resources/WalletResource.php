@@ -2,17 +2,19 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Imports\WalletImporter;
 use App\Filament\Resources\WalletResource\Pages;
-use App\Imports\WalletsImport;
-use Maatwebsite\Excel\Facades\Excel;
 use App\Models\Wallet;
 use Filament\Forms;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
-use Filament\Tables\Table;
 use Filament\Tables\Actions\Action;
-use Filament\Notifications\Notification;
+use Filament\Tables\Actions\ActionGroup as TableActionGroup;
+use Filament\Tables\Table;
+use Filament\Tables\Actions\ImportAction;
+use Illuminate\Validation\Rules\File;
 
 class WalletResource extends Resource
 {
@@ -32,16 +34,25 @@ class WalletResource extends Resource
     {
         return $form
             ->schema([
+                Forms\Components\TextInput::make('label')
+                    ->maxLength(191)
+                    ->required(),
                 Forms\Components\TextInput::make('address')
                     ->maxLength(191)
-                    ->default(null),
+                    ->required(),
                 Forms\Components\TextInput::make('roi')
                     ->numeric()
-                    ->default(null),
-                Forms\Components\TextInput::make('win_rate')
+                    ->required(),
+                Forms\Components\TextInput::make('winrate')
                     ->numeric()
-                    ->default(null),
-                Forms\Components\TextInput::make('status')
+                    ->required(),
+                Forms\Components\Select::make('status')
+                    ->options([
+                        'normal'        => 'Normal',
+                        'approved'      => 'Approved',
+                        'in_review'     => 'Under Review',
+                        'disqualified'  => 'Disqualified',
+                    ])
                     ->required(),
             ]);
     }
@@ -50,12 +61,14 @@ class WalletResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('label')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('address')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('roi')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('win_rate')
+                Tables\Columns\TextColumn::make('winrate')
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status'),
@@ -63,6 +76,17 @@ class WalletResource extends Resource
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('gmgn_link')
+                    ->label('Goto GMGN')
+                    ->state(function () {
+                        return 'View on GMGN';
+                    })
+                    ->url(function ($record) {
+                        return "https://gmgn.ai/sol/address/{$record->address}";
+                    })
+                    ->openUrlInNewTab()
+                    ->color('primary')
+                    ->icon('heroicon-o-arrow-top-right-on-square'),
                 Tables\Columns\TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
@@ -71,26 +95,33 @@ class WalletResource extends Resource
             ->filters([
                 //
             ])
+            ->headerActions([
+                ImportAction::make()  // New import action
+                    ->importer(WalletImporter::class)
+                    ->fileRules([ 
+                        File::types(['csv', 'xlsx'])->max(1024),
+                    ])
+                    ->label('Import')
+            ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Action::make('import')
-                    ->label('Import Wallets')
-                    ->icon('heroicon-o-upload')
-                    ->form([
-                        Forms\Components\FileUpload::make('file')
-                            ->label('Excel File')
-                            ->required()
-                            ->acceptedFileTypes(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel']),
-                    ])
-                    ->action(function (array $data): void {
-                        $file = $data['file'];
-                        Excel::import(new WalletsImport, $file);
-
-                        Notification::make()
-                            ->title('Wallets imported successfully!')
-                            ->success()
-                            ->send();
-                    }),
+                TableActionGroup::make([
+                    Action::make('updateStatus')
+                        ->form([
+                            Select::make('status')
+                                ->options([
+                                    'normal' => 'Normal',
+                                    'approved' => 'Approved',
+                                    'in_review' => 'Under Review',
+                                    'disqualified' => 'Disqualified',
+                                ])
+                        ])
+                        ->action(function (array $data, $record) {
+                            $record->update(['status' => $data['status']]);
+                        })
+                        ->icon('heroicon-o-pencil')
+                        ->tooltip('Change Status'),
+                ])
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
